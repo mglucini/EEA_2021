@@ -1,0 +1,6 @@
+"0","```r
+# Modelo Años de experiencia y Nivel Educativo Alcanzado
+tidy_meed %>%
+  select(term, statistic, p.value, conf.low, conf.high) %>% 
+  arrange(p.value)
+```"

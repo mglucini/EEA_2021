@@ -1,0 +1,4 @@
+"0","```r
+# Modelo Años de experiencia y Nivel Educativo Alcanzado
+tidy(anova(modelo_exp_edu))
+```"

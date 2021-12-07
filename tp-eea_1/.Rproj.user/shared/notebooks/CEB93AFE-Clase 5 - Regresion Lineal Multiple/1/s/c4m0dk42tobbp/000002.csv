@@ -1,0 +1,15 @@
+"0","```r
+# unique(df$nivel_de_estudios_alcanzado)
+df2 <- df %>% 
+  mutate(nivel_educativo = case_when(nivel_de_estudios_alcanzado %in% c(\"Posgrado\", \"Posdoctorado\", \"Doctorado\") ~ \"Posgrado\", 
+                                     TRUE ~ nivel_de_estudios_alcanzado),
+         # unificamos nivel educativo y estado 
+         nivel_edu_alcanzado = paste(nivel_educativo, sep = \" \", estado)) 
+unique(sort(df2$nivel_edu_alcanzado)) # quedan 9 categorías
+```"
+"1","[1] \"Posgrado Completado\"      \"Posgrado En curso\"       
+[3] \"Secundario Completado\"    \"Terciario Completado\"    
+[5] \"Terciario En curso\"       \"Terciario Incompleto\"    
+[7] \"Universitario Completado\" \"Universitario En curso\"  
+[9] \"Universitario Incompleto\"
+"

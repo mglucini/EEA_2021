@@ -1,0 +1,14 @@
+"0","```r
+dist1 <- sim1 %>% 
+  mutate(
+    dodge = rep(c(-1, 0, 1) / 20, 10),
+    x1 = x + dodge, # para que se vean mejor las distancias, corremos un poquito cada punto sobre el eje x
+    pred = 7 + x1 * 1.5
+  )
+
+ggplot(dist1, aes(x1, y)) + 
+  geom_abline(intercept = 7, slope = 1.5, colour = \"grey40\") +
+  geom_point(colour = \"grey40\") +
+  geom_linerange(aes(ymin = y, ymax = pred), colour = \"#3366FF\") +
+  theme_bw()
+```"

@@ -1,0 +1,5 @@
+"0","```r
+# Modelo Años de experiencia y Género
+tidy_mes %>%
+  select(term, statistic, p.value, conf.low, conf.high)
+```"

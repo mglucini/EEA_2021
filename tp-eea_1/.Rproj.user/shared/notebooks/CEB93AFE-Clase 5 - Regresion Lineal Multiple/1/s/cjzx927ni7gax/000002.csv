@@ -1,0 +1,15 @@
+"0","```r
+# Accedemos a la información de los coeficientes estimados
+intercepto_H = modelo_exp_sex$coefficients[1]
+pendiente1 = modelo_exp_sex$coefficients[2]
+intercepto_M = modelo_exp_sex$coefficients[1] + modelo_exp_sex$coefficients[3]
+# Graficamos el dataset y el modelo
+df %>% ggplot(., aes(x = anos_de_experiencia, y = salario_neto)) + 
+  geom_abline(intercept = intercepto_H, slope = pendiente1, color = \"forestgreen\", size=1.5) + # capa del modelo
+  geom_abline(intercept = intercepto_M, slope = pendiente1, color = \"darkorange\", size=1.5) + # capa del modelo 
+  geom_point() + #capa de los datos
+  theme_bw() +
+  scale_x_continuous(limits = c(0,40)) +
+  scale_y_continuous(limits = c(0,150000)) +
+  labs(title=\"Modelo Lineal Múltiple: Años en la empresa y Género\", x=\"Años de experiencia\", y=\"Salario Neto\") 
+```"

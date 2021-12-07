@@ -1,0 +1,4 @@
+"0","```r
+# modelo 1: salario en función de anos de experiencia y anos en empresa actual
+tidy(lm(salario_neto ~ anos_de_experiencia + anos_en_la_empresa_actual, data = df2))
+```"

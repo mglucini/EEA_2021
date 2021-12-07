@@ -1,0 +1,23 @@
+"0","```r
+# Matriz para el grafico
+rss_matrix <- matrix(models_grid[[\"dist\"]],nrow = length(b1),ncol = length(b1), byrow = TRUE)
+
+# Grafico usando plotly
+rss_graph = plot_ly(x=b0, y=b1, z=rss_matrix) %>% add_surface(contours = list(
+  z = list(
+    show=TRUE,
+    usecolormap=TRUE,
+    highlightcolor=\"#ff0000\",
+    project=list(z=TRUE)
+  )
+), reversescale=TRUE)  %>%
+  layout(
+    title = \"Superficie del ECM\",
+    scene = list(
+      xaxis = list(title = \"a0\"),
+      yaxis = list(title = \"a1\"),
+      zaxis = list(title = \"RSS\")
+    ))
+
+rss_graph
+```"

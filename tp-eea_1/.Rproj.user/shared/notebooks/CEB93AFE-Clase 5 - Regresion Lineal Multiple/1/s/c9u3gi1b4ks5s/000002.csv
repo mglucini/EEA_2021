@@ -1,0 +1,7 @@
+"0","```r
+# ajustamos modelo lineal multiple
+modelo_exp_gc <- lm(salario_neto ~ anos_de_experiencia + gente_a_cargo, data = df)
+# Resumen del modelo
+tidy_meg <- tidy(modelo_exp_gc, conf.int = TRUE)
+tidy_meg
+```"

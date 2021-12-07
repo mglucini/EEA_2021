@@ -1,0 +1,4 @@
+"0","```r
+modelo_exp_edad <- lm(salario_neto ~ anos_de_experiencia + edad, data = df2)
+tidy(modelo_exp_edad)
+```"

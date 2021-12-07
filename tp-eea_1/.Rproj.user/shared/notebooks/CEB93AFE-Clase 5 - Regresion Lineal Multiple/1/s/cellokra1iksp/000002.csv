@@ -1,0 +1,8 @@
+"0","```r
+df <- encuesta %>%
+  select(me_identifico, edad, donde_estas_trabajando, anos_de_experiencia, anos_en_la_empresa_actual, anos_en_el_puesto_actual, gente_a_cargo, trabajo_de, nivel_de_estudios_alcanzado, estado, salario_bruto, salario_neto) %>%
+  # creamos la variable perfil
+  mutate(perfil = factor(case_when(trabajo_de == \"BI Analyst / Data Analyst\" ~ \"DA\", trabajo_de == \"Data Scientist / Data Engineer\" ~ \"DS\")))
+df %>%
+  head()
+```"

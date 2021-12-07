@@ -1,0 +1,22 @@
+"0","```r
+summary(lm(y~x, data=sim1))
+```"
+"1","
+Call:
+lm(formula = y ~ x, data = sim1)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-4.1469 -1.5197  0.1331  1.4670  4.6516 
+
+Coefficients:
+            Estimate Std. Error t value Pr(>|t|)    
+(Intercept)   4.2208     0.8688   4.858 4.09e-05 ***
+x             2.0515     0.1400  14.651 1.17e-14 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 2.203 on 28 degrees of freedom
+Multiple R-squared:  0.8846,	Adjusted R-squared:  0.8805 
+F-statistic: 214.7 on 1 and 28 DF,  p-value: 1.173e-14
+"

@@ -1,0 +1,11 @@
+"0","```r
+models <- tibble(
+  a1 = runif(250, -20, 40), # Función para tomar valores al azar de una distribución uniforme
+  a2 = runif(250, -5, 5) # Función para tomar valores al azar de una distribución uniforme
+)
+
+ggplot(sim1, aes(x, y)) + 
+  geom_abline(aes(intercept = a1, slope = a2), data = models, alpha = 1/4) +
+  geom_point() +
+  theme_bw()
+```"

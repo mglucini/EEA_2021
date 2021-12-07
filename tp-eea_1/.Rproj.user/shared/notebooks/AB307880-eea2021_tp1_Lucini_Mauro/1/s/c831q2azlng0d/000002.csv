@@ -1,0 +1,4 @@
+"0","modelo_propio_1 <- lm(peso ~ altura + edad + genero*edad + alimentacion   , data = encuesta_train)"
+"0",""
+"0","tidy_meg <- tidy(modelo_propio_1, conf.int = TRUE)"
+"0","tidy_meg"

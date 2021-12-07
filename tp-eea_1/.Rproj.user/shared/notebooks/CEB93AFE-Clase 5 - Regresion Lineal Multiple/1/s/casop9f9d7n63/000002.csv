@@ -1,0 +1,5 @@
+"0","```r
+cor(df2$anos_de_experiencia, df2$anos_en_la_empresa_actual)
+```"
+"1","[1] 0.5455797
+"

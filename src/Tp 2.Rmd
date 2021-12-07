@@ -1,0 +1,911 @@
+---
+title: "Tradición versus nuevos modelos en Modelado de Series de Tiempo."
+author: "Juan Alvarez - Mauro Lucini"
+output:
+  html_document:
+    df_print: paged
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+# No mostrar warnings en el html
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+## Introducción:
+
+Para este trabajo práctico decidimos realizar un estudio comparativo de
+los modelos predictivos de series temporales ARIMA y PROPHET aplicados a
+la estimación de la cantidad de sesiones del Ecommerce de Merchanding de
+Google.
+
+Se selecciono este dataset debido a que es una Demo de Google Analytics
+y es buen ejemplo de aplicación de estos modelos en áreas de Marketing.
+
+## Librerías a utilizar
+
+```{r}
+library(prophet)
+library(forecast)
+library(marima)
+
+library(tidyverse)
+library(lubridate)
+library(reshape2)
+
+library(Metrics)
+
+library(GGally)
+library(ggplot2)
+```
+
+## Dataset y Preprocesamiento
+
+```{r}
+df <- read.csv('/home/mauro/Escritorio/Facultad/Data Mining/Enfoque Estadístico del Aprendizaje/Trabajo Práctico/data/data_GA.csv')
+df <- head(df,-1)
+
+df <- df  %>%
+  rename(ds =Índice.de.día,
+         y = Sesiones) 
+
+df <- head(df,-1)
+df$ds <- dmy(df$ds)
+
+df$CPC <- as.double(df$CPC)
+df$CPC[is.na(df$CPC)]<- 0
+
+df$Coste <- as.double(df$Coste)
+df$Coste[is.na(df$Coste)]<- 0
+
+head(df)
+glimpse(df)
+
+
+test_30D=subset(df, ds>= "2021-11-01")
+train_30D=subset(df, ds< "2021-11-01")
+```
+
+### Matriz de Correlación
+
+```{r}
+
+matriz_corr <- round(cor(df%>% 
+  select(y, Transacciones, Transacciones.google...cpc, Sesiones.google...cpc,CPC,Coste)),2)
+# Se usa melt para poder introducirla en ggplot
+matriz_corr <- melt(matriz_corr)
+
+# Se crea heatmap con las correlaciones
+ggplot(data = matriz_corr, aes(x=Var1, y=Var2, fill=value)) + 
+  geom_tile()+
+  geom_text(aes(Var2, Var1, label = value), color = "black", size = 3) + # añado el los valores
+ scale_fill_gradient2(midpoint = 0, limit = c(-1,1), space = "Lab", # cambio el gradiente de leyenda y el texto
+   name="Correlation")  + 
+ theme(axis.text.x = element_text(angle = 45, vjust = 1,# Ajusto el text a 45 grados de la x
+    size = 9, hjust = 1),
+    plot.title = element_text(color="black", size=14, face="bold.italic",hjust = 0.5), # ajusto el titulo
+  axis.title.x = element_blank(), # borro el titulo de eje x
+  axis.title.y = element_blank())+ # borro el titulo de eje y
+  ggtitle("Matriz de Correlaciones")+ # genero el texto del titulo
+ coord_fixed()
+
+```
+
+```{r}
+
+ggplot(df, aes(x=ds)) +
+  geom_line(aes(y = y), color = "darkred") + 
+  geom_line(aes(y = Coste), color="steelblue", linetype="twodash") 
+  xlab("")
+```
+
+### Gráficos de Autocorrelación
+
+```{r}
+ggAcf(df %>% select(y))
+
+ggAcf(df %>% select(CPC))
+
+ggAcf(df %>% select(Coste))
+
+```
+
+## ¿Qué es el Prophet ?
+
+Se trata de un algoritmo de código abierto creado por el equipo de Data
+Science de Facebook. Un algoritmo rápido que proporciona pronósticos
+automatizados en pocas líneas de código permitiendo así una ágil
+aplicación del mismo. PROPHET es un modelo similar a un modelo de tipo
+aditivo generalizado (GAM) que permite pronosticar datos de series
+temporales. Para esto las tendencias no lineales se ajustan tanto a la
+estacionalidad (seasonality) anual como a la semanal e incluso a la
+diaria. Cabe destacar, que se trata de un método robusto respecto de los
+datos faltantes y los cambios en las tendencias. También es capaz de
+manejar correctamente los valores atípicos.
+
+¿Cuáles son las componentes de **Prophet**?
+
+-   Estacionalidad: La anual es modelada mediante el uso de las series
+    de Fournier La semanal se modela con variable de tipo dummy
+
+-   Fechas importantes, feriados y demás: se definen previamente en
+    función de si las mismas suponen un quiebre en las tendencias que el
+    modelo deba considerar.
+
+-   Tendencia: el modelo detecta automáticamente los cambios de ésta
+    seleccionando los quiebres de tendencia en el conjunto de datos. De
+    esta manera logra armar las función de tendencia lineal.
+
+Estas componentes se combinan mediante la **ecuación**
+
+$$
+y(t) =g(t) + s(t) + h(t)+ e_t
+$$
+
+donde:
+
+-   g(t) es la curva de crecimiento lineal o logística por partes para
+    modelar cambios no periódicos
+
+-   s(t) son los cambios periódicos (la estacionalidad)
+
+-   h(t) son los efectos que tienen las vacaciones en el pronóstico
+
+-   e(t) es el error del modelo y explica aquellos cambios
+    incondicionales que son inherentes a una empresa, a una persona o a
+    una circunstancia. 
+
+-   y(t) es el pronóstico del modelo.
+
+Como podemos ver Prophet usa el tiempo como regresor e intenta realizar
+un ajuste sobre distintas funciones lineales y no lineales del tiempo
+como componentes. Trata el problema de la predicción como un ejercicio
+de ajuste de curvas, ajusta los datos mediante el uso de armónicos de
+funciones trigonométricas. Además más de ser ágil, tiene la ventaja de
+ser un modelo que no requiere demasiado conocimiento en predecir series
+de tiempo atento que de manera automática encuentra tendencias
+estacionales en los datos.
+
+Según lo mencionado previamente Prophet proporciona dos modelos [g(t)]:
+uno de crecimiento logístico y otro de tipo lineal por partes. Por
+defecto utiliza el de tipo lineal por partes. La elección del modelo es
+un tema delicado atento que esto depende de una variedad de factores
+como el tamaño de la empresa, la tasa de crecimiento, el modelo de
+negocios y demás. Así pues, si los datos contasen con propiedades
+lineales y tuvieran a su vez tendencias de crecimiento o de reducción en
+el pasado, debería utilizarse un modelo de tipo lineal por partes.
+Mientras que si la variable a predecir cuenta con datos saturados y no
+lineales (esto es, crece de forma no lineal y después de alcanzar el
+punto de saturación tiene poco o nulo crecimiento o encogimiento y solo
+presenta algunos cambios estacionales), se debería optar por el modelo
+de crecimiento de tipo logístico.
+
+
+
+```{r}
+m <- prophet(df)
+
+future <- make_future_dataframe(m, periods = 365)
+tail(future)
+
+forecast <- predict(m, future)
+tail(forecast[c('ds', 'yhat', 'yhat_lower', 'yhat_upper')])
+
+plot(m, forecast)
+
+prophet_plot_components(m, forecast)
+```
+
+### Predicciones de corto tiempo
+
+```{r}
+m <- prophet(train_30D)
+
+future <- make_future_dataframe(m, periods = 30)
+tail(future)
+
+forecast <- predict(m, future)
+tail(forecast[c('ds', 'yhat', 'yhat_lower', 'yhat_upper')])
+
+plot(m, forecast)
+
+rmse(test_30D$y, forecast$yhat[732:760])
+
+dyplot.prophet(m, fcst=predict(m, train_30D))
+```
+
+### Predicciones de largo plazo tiempo
+
+```{r}
+
+test_1año=subset(df, ds>= "2020-12-01")
+
+train_1año=subset(df, ds< "2020-12-01")
+
+m <- prophet(train_1año)
+
+future <- make_future_dataframe(m, periods = 364)
+tail(future)
+
+forecast <- predict(m, future)
+tail(forecast[c('ds', 'yhat', 'yhat_lower', 'yhat_upper')])
+
+plot(m, forecast)
+
+rmse(test_1año$y, forecast$yhat[396:760])
+
+dyplot.prophet(m, fcst=predict(m, train_1año))
+```
+
+### Prophet Cross Validation
+
+```{r}
+
+
+m <- prophet()
+m <- fit.prophet(m, df)
+df.cv <- cross_validation(m, horizon = 30, units = 'days')
+df.p <- performance_metrics(df.cv, rolling_window=1)
+df.p
+plot_cross_validation_metric(df.cv, metric = 'rmse')
+```
+
+### ¿Qué Sucede cuando agregamos variables Regresoras?
+
+Prophet puede sumar variables como regresoras al modelo lineal además de
+la objetivo para modelar. Estas regresoras deben ser conocidas para
+datos del futuro también en la predicción.
+
+```{r}
+m <- prophet()
+m<- add_regressor(m,'Coste')
+m <- fit.prophet(m, df)
+df.cv <- cross_validation(m, horizon = 30, units = 'days')
+df.p <- performance_metrics(df.cv)
+df.p 
+
+plot_cross_validation_metric(df.cv, metric = 'rmse')
+
+```
+
+```{r}
+m <- prophet()
+m<- add_regressor(m,'CPC')
+m <- fit.prophet(m, df)
+df.cv <- cross_validation(m, horizon = 30, units = 'days')
+df.p <- performance_metrics(df.cv)
+df.p 
+
+plot_cross_validation_metric(df.cv, metric = 'rmse')
+```
+
+Se utiliza la función prophet::regressor_coefficients para verificar los
+coeficientes de las regresoras
+
+```{r}
+m <- prophet()
+m<- add_regressor(m,'CPC')
+m<- add_regressor(m,'Coste')
+m <- fit.prophet(m, df)
+df.cv <- cross_validation(m, horizon = 30, units = 'days')
+df.p <- performance_metrics(df.cv,rolling_window = 1)
+df.p 
+
+plot_cross_validation_metric(df.cv, metric = 'rmse')
+prophet::regressor_coefficients(m)
+```
+
+### ¿y Agregando Seasonality?
+
+```{r}
+m <- prophet()
+m <- add_seasonality(m, name='weekly', period=7, fourier.order=3, prior.scale=0.1)
+m <- fit.prophet(m, df)
+df.p <- performance_metrics(df.cv,rolling_window = 1)
+df.p 
+
+plot_cross_validation_metric(df.cv, metric = 'rmse')
+
+```
+
+```{r}
+bf_sales = data.frame(
+  holiday= 'bf_sales',
+  ds= ymd(c('2019-11-29','2020-11-27','2021-11-26')),
+  lower_window= 0,
+  upper_window= 0)
+
+m <- prophet(holidays = bf_sales)
+m <- fit.prophet(m, df)
+
+df.cv <- cross_validation(m, horizon = 30, units = 'days')
+df.p <- performance_metrics(df.cv,rolling_window = 1)
+df.p 
+
+plot_cross_validation_metric(df.cv, metric = 'rmse')
+```
+
+```{r}
+m <- prophet()
+m<- add_regressor(m,'CPC')
+m<- add_regressor(m,'Coste')
+m <- add_seasonality(m, name='weekly', period=7, fourier.order=2, prior.scale=0.1)
+m <- fit.prophet(m, df)
+prophet::regressor_coefficients(m)
+
+
+df.cv <- cross_validation(m, horizon = 30, units = 'days')
+
+df.p <- performance_metrics(df.cv,rolling_window = 1)
+df.p 
+
+plot_cross_validation_metric(df.cv, metric = 'rmse')
+prophet::regressor_coefficients(m)
+
+```
+
+### Hiperparámetros del Modelo
+
+Además de esto, se cuenta con los siguiente hiperparmetros para
+encontrar la mejor estimación:
+
+-   Changepoint Prior Scale: indica la flexibilidad de la tendencia y
+    cuanto puede cambiar la tendencia en los puntos que el modelo
+    selecciona. Valores muy altos pueden detectar la temporalidad. Se
+    asemeja a una penalización Lasso.
+
+-   Seasonality Prior Scale: indica cuanto puede ajustar el modelo a la
+    Temporalidad. Se asemeja a una penalización Ridge.
+
+-   Changepoint Range: Es la proporción por la cual la tendencia puede
+    cambiar. Se coloca para no caer en un cambio de tendencia previo a
+    los meses a predecir.
+
+-   Holidays Prior Scale: controla la flexibilidad de los efectos de la
+    variables Holiday cargada al modelo.
+
+-   Seasonality Mode: define si la temporalidad se modela como aditiva o
+    multiplicativa.
+
+-   Growth: Prophet proporciona dos modelos [g(t)]: uno de crecimiento
+    logístico y otro de tipo lineal por partes. Por defecto utiliza el
+    de tipo lineal por partes. La elección del modelo es un tema
+    delicado atento que esto depende de una variedad de factores como el
+    tamaño de la empresa, la tasa de crecimiento, el modelo de negocios
+    y demás. Así pues, si los datos contasen con propiedades lineales y
+    tuvieran a su vez tendencias de crecimiento o de reducción en el
+    pasado, debería utilizarse un modelo de tipo lineal por partes.
+    Mientras que si la variable a predecir cuenta con datos saturados y
+    no lineales (esto es, crece de forma no lineal y después de alcanzar
+    el punto de saturación tiene poco o nulo crecimiento o encogimiento
+    y solo presenta algunos cambios estacionales), se debería optar por
+    el modelo de crecimiento de tipo logístico. 
+
+    -   El modelo Logístico utiliza:
+
+        $$y=\frac{C1}{1+e^{-k(t-m)}}$$
+
+    -   Mientras que el modelo lineal se ajusta mediante:
+
+        $$y= \left\{ \begin{array}{ll} \beta_0+\beta_1 * X: & x<=c\\ \beta_0-\beta_2 c +(\beta_1+\beta_2)X & x>c \end{array} \right. $$
+
+    En donde C es el punto de cambio de tendencia, es un parámetro de
+    tendencia y se puede ajustar según los parámetros para la previsión.
+
+-   Changepoints: introducir manualmente puntos de cambios.
+
+-   Number of changepoints: Introducir manualmente el número total de
+    cambios permitidos al modelo.
+
+-   Yearly/Weekly/Daily seasonality: elegir bajo que temporalidad va a
+    entrenar el modelo.
+
+-   Holidays: Especificar puntos con un efecto específico.
+
+-   Mcmc_samples: indica si utilizar una inferencia bayesiana con
+    Cadenas Monte Carlo de Markov o un Maximo a Posterior.
+
+-   Interval_width: Prophet calcula los intervalos de confianza como
+    quantiles de los intervalos de la distribución posterior. Este
+    parámetro indica que intervalo se calculara y no afecta la
+    predicción.
+
+-   Uncertainty_samples: Los intervalos de la distribución posterior se
+    calculan por Monte Carlo. Este parámetro indica la cantidad de
+    samples que usara para calcularlos. Solo afecta a los intervalos y
+    no a la predicción.
+
+En este caso, se usaron Changepoint Prior Scale, Seasonality Prior Scale
+y Changepoint Range dentro de un Grid Search:
+
+```{r eval=FALSE}
+changepoint_prior_scale <- c(0.01, 0.1, 1.0, 10.0)
+
+seasonality_prior_scale <- c(0.001, 0.01, 0.1, 0.5)
+
+changepoint_range  <- c(0.8, 0.85, 0.9)
+
+hiperparametros <- crossing(changepoint_prior_scale,seasonality_prior_scale,changepoint_range)
+
+rmses= c()
+
+for (i in 1:nrow(hiperparametros))
+{
+ 
+  m <- prophet(seasonality.prior.scale = hiperparametros$seasonality_prior_scale[[i]],
+               changepoint.prior.scale=hiperparametros$changepoint_prior_scale[[i]],
+               changepoint.range =hiperparametros$changepoint_range[[i]] )
+  
+  m <- fit.prophet(m, df)
+  df.cv <- cross_validation(m, horizon = 7, units = 'days')
+  df.p <- performance_metrics(df.cv, rolling_window=7)
+  rmses <- append(rmses, df.p[['rmse']])
+
+}
+hiperparametros$rmse <- rmses
+hiperparametros
+```
+
+## Comparación con Modelo Tradicional de Series de Tiempo
+
+### ¿Qué es el ARIMA?
+
+Es un modelo estadístico que usa variaciones y regresiones de datos
+estadísticos con el fin de encontrar patrones para una predicción. Se
+define como un modelo dinámico de series temporales, esto es, que las
+estimaciones futuras vienen explicadas por los datos del pasado, no por
+variables independientes.
+
+Su método de validación se realiza mediante predicciones sobre una
+muestra: se toman del total de n observaciones de la serie temporal, las
+n-k primeras. Y una vez elegido el modelo se valida su capacidad
+predictiva sobre la submuestra formada por las k últimas observaciones.
+
+#### Componetes / Hiperparámetros del modelo:
+
+-   *La autorregresiva (AR): asume que el valor de la serie en un
+    determinado instante se corresponde con la combinación lineal de la
+    función en instantes anteriores (hasta un número máximo determinado
+    por ellos, llamado "p"), a lo que se añade un componente de error
+    aleatorio. Esto es, la información presente de un evento está
+    relacionada con los valores pasados.*
+
+-   El Promedio Móvil (MA): asume que el valor observado eb un instante
+    se corresponde con un término de error aleatorio al cual se le
+    adiciona una combinación lineal de errores aleatorios previos (hasta
+    un número máximo de ellos, llamado "q")
+
+-   La integración (I): se aplican sucesivas diferenciaciones en los
+    casos en que las series muestren evidencia de no estacionalidad.
+
+```{r}
+arima_30D <- arima(train_30D %>% select(y), order=c(1,0,3))
+
+
+arima_30D
+
+
+pred_30D <- predict(arima_30D,30)
+
+
+rmse(test_30D$y, pred_30D$pred)
+```
+
+## Auto Arima
+
+Auto ARIMA es una método de forecasting que optimiza los valores de
+p,q,d realizando una prueba de cada uno en los datos y optimizando por
+los valores mínimos de AIC y BIC.
+
+```{r}
+autoarima_30D <- auto.arima(train_30D %>% select(y))
+autoarima_30D
+
+pred_auto_30D <- predict(autoarima_30D,30)
+
+
+rmse(test_30D$y, pred_auto_30D$pred)
+```
+
+## Arima Multivariado
+
+```{r}
+
+
+a <- train_30D
+a$ds <- as.numeric(a$ds)
+atrasp <- t(a)
+
+Moldelo_multi <- define.model(kvar=7, ar=1, ma=1, rem.var=c(1,3,4,5), indep=c(2,6,7))
+
+
+modelo_marima <- marima(ts(atrasp),means=1, ar.pattern=Moldelo_multi$ar.pattern, ma.pattern=Moldelo_multi$ma.pattern,
+                        Check=F, Plot=F, penalty=1)
+
+
+a <- a[12:731,]
+tsa <- ts(a)
+nstart  <- 690
+nstep   <- 30
+Forecasts <- arma.forecast(series=tsa, marima=modelo_marima, 
+               nstart=nstart, nstep=nstep )
+
+
+One.step <- Forecasts$forecasts[, (nstart+1)]
+
+Predict  <- Forecasts$forecasts[ 2, 690:720]
+
+
+rmse(a[690:720,2], Predict)
+
+
+```
+
+## Conclusiones:
+
+La primer diferencia de un modelo tradicional de Arima con Prophet es que Prophet viene implementado con opciones de análisis multivariado. Para Arima se necesita recurrir a librerías más especificas para obtener el resultado multivariados.
+
+Otro punto clave es que Prophet logra encontrar los diferentes puntos de cambio en la tendencia de la serie captando la Temporalidad de la misma, ARIMA esto no lo logra. Esto permite a Prophet realizar predicciones con mejores métricas cuando existe Temporalidad. Cuando esta no se encuentra presente en probable que ARIMA encuentre mejores resultados adaptándose a la tendencia de la serie de tiempo.
+
+Entonces, Arima al no captar la temporalidad también suele ser un modelo que predice mucho mejor valores al corto plazo pero es superado por Prophet por cambios de tendencia en puntos más alejados a futuro. 
+
+  Además otro punto muy superador de Prophet es la inclusion de los intervalos de confianza para los valores de la predicción.
+
+
+
+## Bibliografía:
+
+<https://facebook.github.io/prophet/>
+
+<https://cran.r-project.org/web/packages/prophet/prophet.pdf>
+
+<https://datascienceplus.com/time-series-analysis-using-arima-model-in-r/>
+
+<https://rpubs.com/riazakhan94/arima_with_example>
+[https://towardsdatascience.com/arima-vs-prophet-forecasting-air-passenger-numbers-4e01b2d93608\#:\\\~:text=Comparison%20with%20Prophet,trend%20in%20the%20time%20series](https://towardsdatascience.com/arima-vs-prophet-forecasting-air-passenger-numbers-4e01b2d93608#:~:text=Comparison%20with%20Prophet,trend%20in%20the%20time%20series){.uri}
+
+<https://medium.com/analytics-vidhya/time-series-forecasting-arima-vs-prophet-5015928e402a>
+<https://cran.r-project.org/web/packages/marima/marima.pdf>
+
+<https://backend.orbit.dtu.dk/ws/portalfiles/portal/123996117/marima.anv.talk.pdf>
+
+<https://www.rdocumentation.org/packages/forecast/versions/8.15/topics/auto.arima>
+
+<https://otexts.com/fpp2/arima-r.html>
+<https://rdrr.io/cran/marima/man/arma.forecast.html>
+
+<https://cran.r-project.org/web/packages/prophet/prophet.pdf>
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```

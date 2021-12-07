@@ -1,0 +1,13 @@
+"0","```r
+# Obtenemos los mejores parametros
+best$par
+```"
+"1","[1] 4.222248 2.051204
+"
+"0","```r
+# Graficamos la linea de los mejores parametros
+ggplot(sim1, aes(x, y)) + 
+  geom_point(size = 2, colour = \"grey30\") + 
+  geom_abline(intercept = best$par[1], slope = best$par[2], color=\"firebrick\") +
+  theme_bw()
+```"

@@ -1,0 +1,858 @@
+---
+title: 'Trabajo Práctico 1: Regresión Lineal'
+author: "Mauro Lucini"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+# No mostrar warning en el html
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+## Importación de Librerías
+
+Se realiza la importación de librerías que se utilizaran en el desarrollo del trabajo.
+```{r}
+#Librerias para modificar dataframes y modelizar
+library(tidyverse)
+library(reshape2)
+library(tidymodels)
+library(robustbase) 
+
+
+#Librerias para graficar
+library(ggplot2)
+library(ggthemes)  
+library(ggrepel)   
+library(scales)
+library(ggpubr)
+```
+
+## Carga de Dataset utilizar
+
+Se importa los tres archivos ofrecidos para el análisis
+
+```{r}
+# Importo el dataset de train
+encuesta_train <- read_csv("/home/mauro/Escritorio/Facultad/Data Mining/Enfoque Estadístico del Aprendizaje/Trabajo Práctico/data/encuesta_salud_train.csv",show_col_types = FALSE)
+# Importo el dataset de test
+encuesta_test <- read_csv("/home/mauro/Escritorio/Facultad/Data Mining/Enfoque Estadístico del Aprendizaje/Trabajo Práctico/data/encuesta_salud_test.csv",show_col_types = FALSE)
+# Importo el dataset del modelo 6
+encuesta_modelo6 <- read_csv("/home/mauro/Escritorio/Facultad/Data Mining/Enfoque Estadístico del Aprendizaje/Trabajo Práctico/data/encuesta_salud_modelo6.csv",show_col_types = FALSE)
+```
+
+## 1) Análisis Exploratorio
+
+Como primer paso se utiliza la función Glimpse para poder realizar un rápido vistazo de los datos con los que contamos y su tipo:
+
+```{r}
+# Visualizo un resumen de las variables y sus types
+glimpse(encuesta_train)
+```
+
+Se puede ver que tenemos las siguiente variables numéricas: record(es un id), edad, altura, peso, dias_consumo_comida_rapida, consumo_diario_alcohol y dias_actividad_fisica_semanal.
+
+Las demás son variables del tipo cualitativas.
+
+Se verifica los valores únicos de esta para las variables categóricas para conocer su cantidad y también un chequeo de NaNs.
+
+```{r}
+#Creamos una tabla para explorar variables
+tabla_exploratorios =  encuesta_train %>%
+                                      gather(., 
+                                            key = "variables", 
+                                            value = "valores") %>% 
+                                      group_by(variables) %>%  #agrupamos por las variables
+                                      summarise(valores_unicos = n_distinct(valores), #revisamos los valores unicos
+                                      porcentaje_faltantes = sum(is.na(valores))/nrow(encuesta_train)*100) %>% #vemos el porcentaje de Nans
+                                      arrange(desc(porcentaje_faltantes), valores_unicos) # ordenamos por porcentaje de faltantes y valores unicos
+tabla_exploratorios
+```
+
+Notamos que pese a ser variables cualitativas sus valores únicos son relativamente pocos por lo que no tendremos matrices tan ralas en el análisis posterior. También denota que no hay nulos.
+
+### Gráfico de Matriz de Correlaciones
+
+Se realiza un gráfico para medir la correlación entre las distintas variables numéricas. En la siguiente matriz no incluiremos el género.
+
+```{r}
+# Se crea la matriz de correlación
+matriz_corr <- round(cor(encuesta_train%>% 
+  select(edad, altura, peso, dias_consumo_comida_rapida,consumo_diario_alcohol,dias_actividad_fisica_semanal)),2)
+
+# Se usa melt para poder introducirla en ggplot
+matriz_corr <- melt(matriz_corr)
+
+# Se crea heatmap con las correlaciones
+ggplot(data = matriz_corr, aes(x=Var1, y=Var2, fill=value)) + 
+  geom_tile()+
+  geom_text(aes(Var2, Var1, label = value), color = "black", size = 3) + # añado el los valores
+ scale_fill_gradient2(midpoint = 0, limit = c(-1,1), space = "Lab", # cambio el gradiente de leyenda y el texto
+   name="Correlation") + 
+ theme(axis.text.x = element_text(angle = 45, vjust = 1,# Ajusto el text a 45 grados de la x
+    size = 9, hjust = 1),
+    plot.title = element_text(color="black", size=14, face="bold.italic",hjust = 0.5), # ajusto el titulo
+  axis.title.x = element_blank(), # borro el titulo de eje x
+  axis.title.y = element_blank())+ # borro el titulo de eje y
+  ggtitle("Matriz de Correlaciones de la variables númericas")+ # genero el texto del titulo
+ coord_fixed()
+```
+
+De la siguiente matriz observamos una correlación máxima de 0.58 entre peso y altura lo cual era esperable. Luego se encuentra también otra correlación entre Edad y Peso con 0.28 que también hace mucho sentido ya que son las etapas de los niños donde muchos realizan un gran crecimiento altura (si chequeamos la correlación entre altura y edad vemos que tiene un valor similar de 0.25). El resto ya son muy cercanos a cero por lo que en principio parecería que no aportan mucha información al análisis de correlaciones.
+
+### Revisión de variables en función del Género.
+
+Se realiza una revisión de la variable Peso y Altura en función del Género. Se análizan las siguientes variable debido a que la primera es la variable a predecir y la segunda porque puede entenderse que existe una diferencia en el peso asociada a la altura que luego se tratará de verificar. Se utilizan boxplots para esto:
+
+```{r}
+# Guardo el boxplot de peso en función del genero
+box_peso <- ggplot(encuesta_train, aes(x = genero, y = peso))+
+  geom_boxplot(color=c("blue","orange"), fill="orange", alpha=0.2) # Defino colores y filling
+
+# Guardo el boxplot de altura en función del genero
+box_altura <- ggplot(encuesta_train, aes(x = genero, y = altura))+
+  geom_boxplot(color=c("blue","orange"), fill="orange", alpha=0.2) # Defino colores y filling
+
+# Genero Plot concatenando los dos boxplots
+plot <- ggarrange(box_peso, box_altura,
+                    ncol = 2, nrow = 1, common.legend = TRUE)
+# Utilizo esta función para poner un título.
+annotate_figure(plot, top = text_grob("Boxplots por variable Género", 
+               color = "black", face = "bold", size = 14))
+```
+
+Como se supuso, en general, los que poseen género masculino tiene un peso en promedio por encima al género femenino así como su altura. A su vez vemos también que alcanzar valores maximos mayores.
+
+### Agregamos el género a las correlaciones
+
+Para esto se crea una nueva variable numérica que indica 1 cuando se trata de Femenino y 0 cuando se trata de Masculino.
+
+```{r}
+# Cambio la variable genero a númerica
+
+encuesta_train <- encuesta_train%>%
+  mutate(genero_n=case_when(
+    .$genero=="Femenino" ~ 1,
+    .$genero=="Masculino" ~ 0
+    ))
+
+# También en el test
+encuesta_test <- encuesta_test%>%
+  mutate(genero_n=case_when(
+    .$genero=="Femenino" ~ 1,
+    .$genero=="Masculino" ~ 0
+    ))
+
+```
+
+Realizamos el gráfico de la Matriz de Correlaciones con esta adición.
+
+```{r}
+# Se crea la matriz de correlación
+matriz_corr <- round(cor(encuesta_train%>% 
+  select(edad, genero_n, altura, peso, dias_consumo_comida_rapida,consumo_diario_alcohol,dias_actividad_fisica_semanal)),2)
+
+# Se usa melt para poder introducirla en ggplot
+matriz_corr <- melt(matriz_corr)
+
+# Se crea heatmap con las correlaciones
+ggplot(data = matriz_corr, aes(x=Var1, y=Var2, fill=value)) + 
+  geom_tile()+
+  geom_text(aes(Var2, Var1, label = value), color = "black", size = 3) + # añado el los valores
+ scale_fill_gradient2(midpoint = 0, limit = c(-1,1), space = "Lab", # cambio el gradiente de leyenda y el texto
+   name="Correlation") + 
+ theme(axis.text.x = element_text(angle = 45, vjust = 1,# Ajusto el text a 45 grados de la x
+    size = 9, hjust = 1),
+    plot.title = element_text(color="black", size=14, face="bold.italic",hjust = 0.5), # ajusto el titulo
+  axis.title.x = element_blank(), # borro el titulo de eje x
+  axis.title.y = element_blank())+ # borro el titulo de eje y
+  ggtitle("Matriz de Correlaciones de la variables númericas")+ # genero el texto del titulo
+ coord_fixed()
+```
+
+Verificando la nueva correlación Género y Peso vemos un bastante pronunciada con -0.47 (tomando como referencia que el resto de los valores son bastante bajos). Esto podría indicar que cuando el género es femenino, el peso tiende a disminuir.
+
+### Análisis de la frecuencia de Hambre en relación al consumo de frutas y al consumo de alimentos grasos
+
+Calculamos con un group_by las frecuencias absolutas de las apariciones entre consumo de frutas semanal y frecuencia de hambre mensual. Realizamos el mismo agrupamiento pero con el consumo de comida grasa semanal.
+
+Por último realizamos el gráfico de histogramas para poder visualizar con mayor facilidad estos datos.
+
+```{r}
+freq_hambre_fruta <- encuesta_train %>%
+  group_by(frecuencia_hambre_mensual, consumo_semanal_frutas) %>% #agrupamos por las variables
+  summarise(freq_absoluta = n()) %>% #hacemos un count
+  mutate(freq_relativa = freq_absoluta / sum(freq_absoluta)) #Sacamos la frencuencia absoluta con sum
+freq_hambre_fruta
+
+freq_hambre_comidagrasa<- encuesta_train %>%
+  group_by(frecuencia_hambre_mensual, consumo_semanal_comida_grasa) %>% #agrupamos por las variables
+  summarise(freq_absoluta = n()) %>% #hacemos un count
+  mutate(freq_relativa = freq_absoluta / sum(freq_absoluta)) #Sacamos la frencuencia absoluta con sum
+freq_hambre_comidagrasa
+
+
+
+hist_comida_grasa <- ggplot(encuesta_train, aes(x=consumo_semanal_comida_grasa,color=frecuencia_hambre_mensual))+ 
+  geom_histogram(aes(y = stat(count) / sum(count)), stat="count",fill="grey") +
+    theme_bw()+
+ theme(axis.text.x = element_text(angle = 45, vjust = 1,# Ajusto el text a 45 grados de la x
+    size = 7, hjust = 1)) +
+     scale_color_viridis_d(option = "turbo",
+                           guide = guide_legend(override.aes = list(size = 3) ) )
+
+
+
+hist_fruta <- ggplot(encuesta_train, aes(x=consumo_semanal_frutas,color=frecuencia_hambre_mensual))+ 
+  geom_histogram(aes(y = stat(count) / sum(count)), stat="count",fill="grey") +
+    theme_bw()+
+ theme(axis.text.x = element_text(angle = 45, vjust = 1,# Ajusto el text a 45 grados de la x
+    size = 7, hjust = 1)) +
+     scale_color_viridis_d(option = "turbo",
+                           guide = guide_legend(override.aes = list(size = 3) ) )
+
+
+ggarrange(hist_fruta, hist_comida_grasa,
+                    ncol = 2, nrow = 1, common.legend = TRUE)
+```
+
+En ambos gráficos, se nota como primer medida que hay muy pocas apariciones de "Siempre" y "Casi Siempre" en frecuencia de hambre mensual. Esto da un indicio de que no hay demasiados alumnos de secundaria que pasen hambre dentro de la encuesta.
+
+Luego se identifica que la mayoría de la observaciones se encuentran en los que comen entre 1 y 3 veces a la semana por lo menos 1 de esto grupos de alimentos o que directamente no los consumen. Además parecería que hay una mayor tendencia de hambruna en estos casos (más presencia de "algunas veces" y "Rara vez") que podría ser explicado ya que los alimentos grasos ser altos en calorías lo cual reduce el apetito y lo mismo pasa con la fruta pero debido a que estos suelen contener azucares y suelen ocupar volumen en el estomago que también genera sensación de saciedad.
+
+## 2) Modelo inicial
+
+Se realiza el primer modelo lineal como lo indica la consigna:
+
+$E(peso) = \beta_0 +\beta_1 altura+\beta_2 edad+\beta_3 genero+\beta_4 diasActividadFisicaSemanal +\beta_5 consumoDiarioAlcohol$
+
+```{r}
+# Selecciono las variables a utilizar
+
+df_modelo_inicial <-  encuesta_train %>%
+  select(peso, altura, edad,genero,dias_actividad_fisica_semanal,consumo_diario_alcohol)
+
+# utilizo lm para entrenar el modelo inicial con las variables anteriores
+modelo_inicial <- lm(peso ~ altura + edad + genero + dias_actividad_fisica_semanal + consumo_diario_alcohol, data = df_modelo_inicial)
+
+```
+
+Se utiliza la función tidy que devuelve las principales métricas de análasis.
+
+```{r}
+# Ejecuto tidy para ver las salidas del modelo
+tidy_meg <- tidy(modelo_inicial, conf.int = TRUE)
+tidy_meg
+
+```
+
+El valor de los β estimados son:
+
+-   Intercept: en este caso nos da aproximadamente -67.7. Esto es correcto dado que esta evaluando una incoherencia que sería que la persona tenga altura igual a cero, edad igual a cero y así sucesivamente.
+
+-   Altura: su interpretación es aumentando un centímetro y dejando todos los valores iguales, aumentaría 0.65 kg.
+
+-   Edad: por cada año habría que aumentar 1.4 kg en su peso (dejando el resto de las variables fijas). La interpretación es bastante acercada a la realidad pero hay que verificar su significatividad
+
+-   Género: dejando todas las variables fijas, cambiando el género de Masculino a Femenino, debemos reducir -1.26 kg del peso predicho. La disminución es lógica viendo los resultados de los boxplots. \# Revisar las medias para ver el beta
+
+-   Días de actividad Física Semanal: resulta lógico que cuando crezca la cantidad de actividad física, haya una disminución del peso. Se debe verificar también su significatividad individual.
+
+-   Consumo diario Alcohol: resulta lógico que cuando crezca la cantidad de actividad física, haya un aumento del peso. Se debe verificar también su significatividad individual.
+
+Para verificar de mejor forma la significatividad individual seleccionaremos la métrica del estadístico t, el p-valor, y los valores del intervalos de confianza. También se aplica un redondeo para visualizar mejor el pvalor.
+
+```{r}
+# Ejecuto tidy para ver las salidas del modelo filtrando por las de interes y redondeando el p valor
+tidy_meg %>%
+  select(term, statistic, p.value, conf.low, conf.high)%>% 
+  mutate(p.value = round(p.value, 4))
+
+```
+
+Debido a que el p-valor es menor 0.05, podemos afirmar que la altura, la edad y el género son variables significativas en el modelo. Podemos ver además que el estadístico es muy alto y los intervalos de confianza no contiene al cero. Cabe destacar que la variable género se encuentra como una categoría basal generoMasculino resultando siginificativo como se indica anteriormente.
+
+Se rechaza la significatividad del consumo diario de alcohol y la cantidad de días de actividad física porque poseen p-valor mayores a 0.05. En estos casos además los intervalos de confianza contienen al cero.
+
+Para evaluar si el modelo resulta explicativo se utilizará broom:glance para ver el coeficiente de determinación $R^2$ y $R^2$ ajustado
+
+```{r}
+
+# Ejecuto glance de la Liberia broom para ver el R2 y R2 ajustado del modelo
+
+broom::glance(modelo_inicial)
+```
+
+Se identifica un $R^2$ de 0.3544 y un $R^2$ ajustado 0.3539. Esto nos permite decir que el modelo explica un 0.35 de la variabilidad y a su vez como el ajustado esta muy próximo al real, es una buena medida de que el modelo no esta sufriendo el agrado de muchas variables adicionales.
+
+Se evalua la significatividad global del modelo, haciendo foco en el Test F, donde podremos ver que este estadistico es un número elevado generando un p valor de 2.2e-16 (menos a 0.05), por lo que hay evidencia suficiente para rechazar que no haya vinculo entre las variables respuesta y las regresoras.
+
+## 3) Modelo con Variables Categóricas
+
+Se evaluará un modelos con la inclusión de variables categóricas y una interacción entre género y edad, como el siguiente:
+
+$E(peso) = \beta_0 +\beta_1 altura+\beta_2 edad+\beta_3 genero+\beta_4 consumoSemanalSnacks +\beta_5 genero*edad$
+
+También se deberá usar relevel para cambiar la categoría basal de consumo_semanal_snacks para que esta sea "No comí comida salada o snacks en los últimos 7 días". Esta interpretación es buena para efectivamente poder evaluar si su consumo aumenta o disminuye su estadistico en la predicción del Peso.
+
+```{r}
+#filtro el dataframe por las variables a utilizar en el modelo categóricas
+df_modelo_categoricas <-  encuesta_train %>%
+  select(peso, altura, edad,genero,consumo_semanal_snacks)
+#Factorizo con factor() la variable de consumo de snack
+df_modelo_categoricas$consumo_semanal_snacksFactor <- factor(df_modelo_categoricas$consumo_semanal_snacks)
+
+#Uso relevel para cambiar la categoría basal 
+df_modelo_categoricas$consumo_semanal_snacksFactor <- relevel(df_modelo_categoricas$consumo_semanal_snacksFactor, ref = "No comí comida salada o snacks en los últimos 7 días")
+# Entreno el modelo de variables categóricas
+modelo_categoricas <- lm(peso ~ altura + edad + genero +  consumo_semanal_snacksFactor + edad * genero, data = df_modelo_categoricas)
+
+```
+
+Volvemos a utilizar tanto la función tidy como broom:glance para hacer las evualiciones pertinentes.
+
+```{r}
+modelo_categoricas <- lm(peso ~ altura + edad + genero +  consumo_semanal_snacksFactor + edad * genero, data = df_modelo_categoricas)
+# Ejecuto tidy para ver las salidas del modelo seleccionando las variables que nos son de interes y redondeando el p-valor
+tidy_meg <- tidy(modelo_categoricas, conf.int = TRUE)%>%
+  select(term, statistic, p.value, conf.low, conf.high)%>% 
+  mutate(p.value = round(p.value, 4)) # redondeo p valor
+tidy_meg
+# Ejecuto glance para ver el R2 y R2 ajust del modelo
+broom::glance(modelo_categoricas)
+```
+
+Evaluando las salidas podemos mencionar:
+
+-   El consumo semanal de Snacks pareciera tener un comportamiento no esperado respecto de su categoría basal. De acuerdo a sus Betas todos reducen el valor del peso final, incluso el caso extremo de 4 veces o más lo cual es contraintituivo ya que los snack suelen suelen ser altos en calorías que fomenta el aumento de peso. De todas forma revisando los p valores podremos notar que los siguientes terminos no son significativos por no superar un umbral de 0.05: consumo_semanal_snacksFactor 1 vez al día, consumo_semanal_snacksFactor2 vez al día, consumo_semanal_snacksFactor3 vez al día.
+
+-   Ya viendo la interacción entre edad y género modelada se obtiene un valor de Beta de 2.19, lo cual parece ser bastante acorde ya que revisando el termino género masculino y teniendo en cuenta que la categoría basal es género femenino, podremos ver que este esta modelando un aumento cuando la edad crece y el género es masculino que se ve aplacado por el Beta de género Masculino y amplificado por el Beta de Edad, lo que resulta bastante similar a lo que uno esperaría. Haciendo un análisis de su significatividad vemos un p valor de 0.0288, menor a 0.05, lo cual podemos decantar que la variable es significativa. Un detalle no mencionado anteriormente es que la variable género resulto no significativo por su pvalor de 0.08.
+
+-   El modelo además tiene un $R^2$ de 0.3585 y un $R^2$ ajustado 0.3575 como valores de porcentaje de variabilidad explicada.
+
+Como los resultados de la variable de ConsumoSemanalSnacks dio como resultado terminos no significativos, revisaremos la opción de renombrarlos y evaluar si de esta forma toda la variable resulta significativa en su totalidad.
+
+```{r}
+# con mutate y case_wheen renombro las 3 categorías por 1-3 veces 
+df_modelo_categoricas <- df_modelo_categoricas %>% 
+  mutate(consumo_semanal_snacksFactor2 = case_when(
+         (consumo_semanal_snacksFactor == "3 veces al día") ~ "1-3 veces al día",
+         (consumo_semanal_snacksFactor == "2 veces al día") ~ "1-3 veces al día",
+         (consumo_semanal_snacksFactor == "1 veces al día") ~ "1-3 veces al día",
+         (consumo_semanal_snacksFactor == "No comí comida salada o snacks en los últimos 7 días") ~ "No comí comida salada o snacks en los últimos 7 días",
+         (consumo_semanal_snacksFactor == "1 a 3 veces durante los últimos 7 días") ~ "1 a 3 veces durante los últimos 7 días",
+         (consumo_semanal_snacksFactor == "4 o más veces al día") ~ "4 o más veces al día",
+         (consumo_semanal_snacksFactor == "Dato perdido") ~ "Dato perdido",
+         (consumo_semanal_snacksFactor == "4 a 6 veces durante los últimos 7 días") ~ "4 a 6 veces durante los últimos 7 días")
+         )
+# Se usa Factor para cambiar la variable nueva a factor
+df_modelo_categoricas$consumo_semanal_snacksFactor2 <- factor(df_modelo_categoricas$consumo_semanal_snacksFactor2)
+
+# Se cambia la categoría basal con relevel
+df_modelo_categoricas$consumo_semanal_snacksFactor2 <- relevel(df_modelo_categoricas$consumo_semanal_snacksFactor2, ref = "No comí comida salada o snacks en los últimos 7 días")
+
+```
+
+Se comprueba nuevamente con el modelo lineal multiple para ver si esta modificación generó una mejora
+
+```{r}
+# Re entreno el modelo de variables categóricas con la modificacion en el consumo de snacks semanal
+modelo_categoricas <- lm(peso ~ altura + edad + genero +  consumo_semanal_snacksFactor2 + edad * genero, data = df_modelo_categoricas)
+
+# Ejecuto tidy para ver las salidas del modelo
+tidy_meg <- tidy(modelo_categoricas, conf.int = TRUE)%>%
+  select(term, statistic, p.value, conf.low, conf.high)%>% 
+  mutate(p.value = round(p.value, 4))
+tidy_meg
+# Ejecuto glance para ver los coeficiente de determinación del modelo
+broom::glance(modelo_categoricas)
+```
+
+Con este cambio no solo salvamos la significatividad de la variable ya que ahora todos los términos son significativos sino que también logramos aumentar la variabilidad explicada con un $R^2$ de 0.3652 y un $R^2$ ajustado 0.3643.
+
+## 4) Modelos Propios y evaluación
+
+El primer modelo planteado se centrara en combinar las variables consumo_semanal_comida_grasa, consumo semanal snack y consumo semanal de alcohol para definir una nueva variable que se nombre Alimentación y posee tres valores: "Mala", "Equilibrada" y "Buena".
+
+```{r}
+# Se crea la variable alimentacion con un mutate y case_when 
+encuesta_train <- encuesta_train %>% 
+  mutate(alimentacion = case_when((consumo_semanal_comida_grasa == "4 o más veces al día") ~ "Mala",  #Se escibren las condiciones para alimentación mala
+                                 (consumo_semanal_comida_grasa == "3 veces al día") ~ "Mala",
+                                 (consumo_semanal_comida_grasa == "2 veces al día"&(consumo_semanal_snacks == "4 o más veces al día"|consumo_semanal_snacks == "3 veces al día"|consumo_semanal_snacks == "2 veces al día")) ~ "Mala",
+                                 (consumo_semanal_snacks == "4 o más veces al día") ~ "Mala",
+                                 (consumo_semanal_snacks == "3 veces al día") ~ "Mala",
+                                 
+                                 (consumo_semanal_gaseosas == "4 o más veces al día") ~ "Mala",
+                                   #Se escibren las condiciones para alimentación buenas
+                                 (consumo_semanal_comida_grasa == "No comí comida alta en grasa en los últimos 7 días"&consumo_semanal_gaseosas == "No tomé gaseosas en los últimos 7 días"&(consumo_semanal_snacks != "4 o más veces al día")) ~ "Buena",
+                                 
+                                 ((consumo_semanal_comida_grasa != "4 o más veces al día"|consumo_semanal_comida_grasa != "3 veces al día")&consumo_semanal_gaseosas == "No tomé gaseosas en los últimos 7 días"&consumo_semanal_snacks == "No comí comida salada o snacks en los últimos 7 días") ~ "Buena",
+                                 (consumo_semanal_comida_grasa == "No comí comida alta en grasa en los últimos 7 días"&consumo_semanal_gaseosas != "4 o más veces al día"&consumo_semanal_snacks == "No comí comida salada o snacks en los últimos 7 días") ~ "Buena",
+                                 TRUE ~ "Equilibrada"))# los que no cumplan con las condiciones serán Equilibrada
+
+#Se usa factor() para transformar la variables
+encuesta_train$alimentacion <- factor(encuesta_train$alimentacion)
+```
+
+Se hace una revisión simple de que esta nueva etiqueta queda aproximadamente balanceada. Los siguientes resultados demuestran que esta correcto:
+
+```{r}
+# Se usa relevel para cambiar la categoría basal a "Equilibrada"
+encuesta_train$alimentacion <- relevel(encuesta_train$alimentacion, ref = "Equilibrada")
+# Se usa count para ver la cantidad de valores por categoría en la columna alimentación 
+encuesta_train  %>%  count(alimentacion)
+```
+
+El criterio utilizado esta pensado para atacar los extremos de mal consumo de alimentos y aquellos que tienen una alimentación muy buena y por eso la mayoría de los casos entraran en equilibrado. A su vez probaremos como categoría basal a la alimentación "Equilibrada".
+
+A este modelo se sumaran las variables altura edad y la interacción entre edad y género que en modelo de variables categórica parece generar un buen resultado .
+
+```{r}
+# Se entrena el primer modelos propio de regresión lineal multiple
+modelo_propio_1 <- lm(peso ~ altura + edad + genero*edad + alimentacion   , data = encuesta_train)
+
+# Se usa la función tidy para evaluar los terminos 
+tidy_meg <- tidy(modelo_propio_1, conf.int = TRUE)
+tidy_meg
+```
+
+Verificando las salidas, notamos que el único termino no significativo es el de generoMasculino por su p valor. El resto cumplen con que su p valor sea menor a 0,05 y sus intervalos de Confiaza no incluyen al cero. 
+Además podremos ver que con glance que el $R^2$ es de 0.3566 y el $R^2$ ajustado tiene valor 0.356. 
+
+```{r}
+# Se usa la función glance para verificar el R2 y el r2 ajustado del modelo propio 1
+broom::glance(modelo_propio_1)
+```
+
+El segundo modelo contará con una nueva variable nombrada "ratio_salud". El enfoque de este nuevo ratio es encontrar una relación númerica formada por el consumo_diario_alcohol, dias_consumo_comida_rapida y dias_actividad_fisica_semanal que trate de explicar en terminos númericos cuan saludable es la Persona.
+
+Como la única variable que se encuentra desfasada en terminos de tiempo es el consumo de alcohol ya queesta medido su consumo diario y no semanal.  Por lo que primero se hara una multiplicación para igualarlo al resto de las variables. Luego se realiza la siguiente operación:
+
+$(consumoSemanalAlcohol+consumoSemanaComidaRapida)/e ^d)$
+
+donde d es diasActividadFisicaSemanal. Esto se realiza para que haya un crecimiento más asentado cuando un persona realiza mucho ejercicio. Por último se utiliza la función scale para hacer una estandarización de los datos y de esta forma que queden entre [-1;1] siendo 1 una persona que tiene hábitos no saludables y -1 una que suele tener una vida más sana.
+
+```{r}
+# Se utiliza mutate para crear consumo semanal alcohol multiplicando por 7 a consumo diario alcohol
+encuesta_train <- encuesta_train %>% 
+  mutate(consumo_semanal_alcohol = consumo_diario_alcohol * 7)
+
+# Usamos mutate para realiza la función previamente mencionada y la función exp para realizar el e^d  
+encuesta_train <- encuesta_train %>% 
+  mutate(ratio_salud = (consumo_semanal_alcohol+dias_consumo_comida_rapida)/exp(dias_actividad_fisica_semanal))
+
+#Con mapply Si algún valor nos queda inf por no hacer ejercicio le pondremos un 1
+encuesta_train[mapply(is.infinite, encuesta_train)] <- 1
+
+#Con mapply Si algún valor nos queda NA  le pondremos un 0
+encuesta_train[mapply(is.na, encuesta_train)] <- 0
+
+#Con scale estandarizamos la variable
+encuesta_train <- encuesta_train %>% 
+  mutate(ratio_salud_norm=scale(ratio_salud))
+
+```
+
+Con el breve feature engineering realizado se crea el nuevo modelo que incluye como variables predictoras a la altura, edad y ambas variables creadas para estos modelos que son alimentación y el ratio de salud normalizado. 
+
+```{r}
+# Se entrena el Segundo modelos propio de regresión lineal multiple
+modelo_propio_2 <- lm(peso ~ altura + edad + ratio_salud_norm + alimentacion , data = encuesta_train)
+
+# Se usa la función tidy para evaluar los terminos 
+tidy_meg <- tidy(modelo_propio_2, conf.int = TRUE)
+tidy_meg
+
+# Se usa la función glance para verificar el R2 y el r2 ajustado del modelo propio 2
+broom::glance(modelo_propio_2)
+```
+
+Revisando las salidas de tidy y de grance de broom notamos que la inclusión del Ratio Salud no significo un aumento significativo de $R^2$ o $R^2$ ajustado con valores de 0.354 y de 0.353 respectivamente y también como el p valor de esta variable es mayor a 0.05 resulta ser no significativa. El resto de las variables si lo son y ninguno de sus intervalos de confianza incluyen al cero. 
+
+Con los modelos propios ya creados, se procederá a verificar el RMSE y MAE de cada uno de los modelos tanto en entrenamiento como en test. 
+
+El primer caso será el modelo inicial:
+```{r}
+# Utilizamos augment para predecir con nuestro modelo inicial en Train
+pred_modelo_inicial_train <-  augment(modelo_inicial, newdata = encuesta_train)
+
+#Utilizamos la función rmse y mae para calcular los errores de train del modelo inicial y add_row para que que salga en una sola salida
+rmse(data = pred_modelo_inicial_train, truth = peso, estimate = .fitted)%>% 
+  add_row(mae(data = pred_modelo_inicial_train, truth = peso, estimate = .fitted))
+
+
+# Utilizamos augment para predecir con nuestro modelo inicial en Test
+pred_modelo_inicial_test <-  augment(modelo_inicial, newdata = encuesta_test)
+
+#Utilizamos la función rmse y mae para calcular los errores de test del modelo inicial y add_row para que que salga en una sola salida
+rmse(data = pred_modelo_inicial_test, truth = peso, estimate = .fitted)%>%
+  add_row(mae(data = pred_modelo_inicial_test, truth = peso, estimate = .fitted))
+```
+
+Luego para el caso del modelo de variables categóricas primero tendremos que hacer la misma tranformación que se realizo previamente sobre la variable de Consumo Semanal de Snacks. Luego de esto haremos la predicción en train y en test para evaluar. 
+
+```{r}
+
+# Realizamos el FE del modelo categóricas
+
+encuesta_test <- encuesta_test %>% 
+  mutate(consumo_semanal_snacksFactor2 = case_when(
+         (consumo_semanal_snacks == "3 veces al día") ~ "1-3 veces al día",
+         (consumo_semanal_snacks == "2 veces al día") ~ "1-3 veces al día",
+         (consumo_semanal_snacks == "1 veces al día") ~ "1-3 veces al día",
+         (consumo_semanal_snacks == "No comí comida salada o snacks en los últimos 7 días") ~ "No comí comida salada o snacks en los últimos 7 días",
+         (consumo_semanal_snacks == "1 a 3 veces durante los últimos 7 días") ~ "1 a 3 veces durante los últimos 7 días",
+         (consumo_semanal_snacks == "4 o más veces al día") ~ "4 o más veces al día",
+         (consumo_semanal_snacks == "Dato perdido") ~ "Dato perdido",
+         (consumo_semanal_snacks == "4 a 6 veces durante los últimos 7 días") ~ "4 a 6 veces durante los últimos 7 días")
+         )
+
+# Se usa Factor para cambiar la variable nueva a factor
+encuesta_test$consumo_semanal_snacksFactor2 <- factor(encuesta_test$consumo_semanal_snacksFactor2)
+
+# Se cambia la categoría basal con relevel
+encuesta_test$consumo_semanal_snacksFactor2 <- relevel(encuesta_test$consumo_semanal_snacksFactor2, ref = "No comí comida salada o snacks en los últimos 7 días")
+
+
+# Utilizamos augment para predecir con nuestro modelo categóricas en Train
+pred_modelo_categoricas_train <-  augment(modelo_categoricas, newdata = df_modelo_categoricas)
+
+
+#Utilizamos la función rmse y mae para calcular los errores de train del modelo categóricas y add_row para que que salga en una sola salida
+rmse(data = pred_modelo_categoricas_train, truth = peso, estimate = .fitted)%>% 
+  add_row(mae(data = pred_modelo_categoricas_train, truth = peso, estimate = .fitted))
+
+# Utilizamos augment para predecir con nuestro modelo categóricas en Test
+pred_modelo_categoricas_test <-  augment(modelo_categoricas, newdata = encuesta_test)
+
+#Utilizamos la función rmse y mae para calcular los errores de test del modelo categóricas y add_row para que que salga en una sola salida
+rmse(data = pred_modelo_categoricas_test, truth = peso, estimate = .fitted)%>%
+  add_row(mae(data = pred_modelo_categoricas_test, truth = peso, estimate = .fitted))
+
+```
+
+Lo mismo sucederá para ambos modelos propios, donde habrá primero que hacer las mismas transformaciones en el dataset de test para luego predecir y evaluar. 
+
+```{r}
+# Realizamos el FE en test del primer modelo propio
+encuesta_test <- encuesta_test %>% 
+  mutate(alimentacion = case_when((consumo_semanal_comida_grasa == "4 o más veces al día") ~ "Mala",
+                                 (consumo_semanal_comida_grasa == "3 veces al día") ~ "Mala",
+                                 (consumo_semanal_comida_grasa == "2 veces al día"&(consumo_semanal_snacks == "4 o más veces al día"|consumo_semanal_snacks == "3 veces al día"|consumo_semanal_snacks == "2 veces al día")) ~ "Mala",
+                                 (consumo_semanal_snacks == "4 o más veces al día") ~ "Mala",
+                                 (consumo_semanal_snacks == "3 veces al día") ~ "Mala",
+                                 
+                                 (consumo_semanal_gaseosas == "4 o más veces al día") ~ "Mala",
+                                 (consumo_semanal_comida_grasa == "No comí comida alta en grasa en los últimos 7 días"&consumo_semanal_gaseosas == "No tomé gaseosas en los últimos 7 días"&(consumo_semanal_snacks != "4 o más veces al día")) ~ "Buena",
+                                 
+                                 ((consumo_semanal_comida_grasa != "4 o más veces al día"|consumo_semanal_comida_grasa != "3 veces al día")&consumo_semanal_gaseosas == "No tomé gaseosas en los últimos 7 días"&consumo_semanal_snacks == "No comí comida salada o snacks en los últimos 7 días") ~ "Buena",
+                                 (consumo_semanal_comida_grasa == "No comí comida alta en grasa en los últimos 7 días"&consumo_semanal_gaseosas != "4 o más veces al día"&consumo_semanal_snacks == "No comí comida salada o snacks en los últimos 7 días") ~ "Buena",
+                                 TRUE ~ "Equilibrada"))
+
+# Se usa Factor para cambiar la variable nueva a factor
+encuesta_test$alimentacion <- factor(encuesta_test$alimentacion)
+
+# Se cambia la categoría basal con relevel
+encuesta_test$alimentacion <- relevel(encuesta_test$alimentacion, ref = "Equilibrada")
+```
+
+```{r}
+
+# Utilizamos augment para predecir con nuestro modelo propio 1 en Train
+pred_modelo_propio1_train <-  augment(modelo_propio_1, newdata = encuesta_train)
+
+#Utilizamos la función rmse y mae para calcular los errores de train del modelo propio 1 y add_row para que que salga en una sola salida
+rmse(data = pred_modelo_propio1_train, truth = peso, estimate = .fitted)%>% 
+  add_row(mae(data = pred_modelo_propio1_train, truth = peso, estimate = .fitted))
+
+
+# Utilizamos augment para predecir con nuestro modelo propio 1 en Test
+pred_modelo_propio1_test <-  augment(modelo_propio_1, newdata = encuesta_test)
+
+#Utilizamos la función rmse y mae para calcular los errores de test del modelo propio 1 y add_row para que que salga en una sola salida
+rmse(data = pred_modelo_propio1_test, truth = peso, estimate = .fitted)%>%
+  add_row(mae(data = pred_modelo_propio1_test, truth = peso, estimate = .fitted))
+```
+
+```{r}
+# Realizamos el FE en test
+encuesta_test <- encuesta_test %>% 
+  mutate(consumo_semanal_alcohol = consumo_diario_alcohol * 7) # multiplicamos por 7 para obtener consumo semanal alcohol
+
+encuesta_test <- encuesta_test %>% 
+  mutate(ratio_salud = (consumo_semanal_alcohol+dias_consumo_comida_rapida)/exp(dias_actividad_fisica_semanal)) #con exp y la formula mencionada generamos ratio_salud en test
+
+encuesta_test[mapply(is.infinite, encuesta_test)] <- 1 #Si algun valor nos queda inf por no hacer ejercicio le pondremos un 1
+#encuesta_test[mapply(is.na, encuesta_test)] <- 0
+encuesta_test <- encuesta_test %>% 
+  mutate(ratio_salud_norm=scale(ratio_salud)) #usamos scale para estandarizar la variable
+
+# Utilizamos augment para predecir con nuestro modelo propio 2 en Train
+pred_modelo_propio2_train <-  augment(modelo_propio_2, newdata = encuesta_train)
+
+#Utilizamos la función rmse y mae para calcular los errores de entrenamiento del modelo propio 2 y add_row para que que salga en una sola salida
+rmse(data = pred_modelo_propio2_train, truth = peso, estimate = .fitted)%>% 
+  add_row(mae(data = pred_modelo_propio2_train, truth = peso, estimate = .fitted))
+
+# Utilizamos augment para predecir con nuestro modelo propio 2 en Test
+pred_modelo_propio2_test <-  augment(modelo_propio_2, newdata = encuesta_test)
+
+#Utilizamos la función rmse y mae para calcular los errores de test del modelo propio 2 y add_row para que que salga en una sola salida
+
+rmse(data = pred_modelo_propio2_test, truth = peso, estimate = .fitted)%>%
+  add_row(mae(data = pred_modelo_propio2_test, truth = peso, estimate = .fitted))
+```
+
+Analizando todos los modelos diremos que hay una variación de entre 0.3 y 0.4 del RMSE y de 0.1 y 0.14 del MAE entre train y test. Con estos datos podremos evaluar que no se esta cometiendo overfitting ya que las predicciones en test no presentan errores muy superiores que en training por lo que el modelo esta generalizando de buena manera. 
+
+La segunda observación es que pese a las diferentes variables que se agregaron el R2 no crece en su variabilidad explicada con el aumento de variables. De todas formas esta adición tampoco nos significa una disminución enel R2 ajustado por lo que no estamos sumando variables en exceso a los modelos. Siendo valores tan cercanos concluiremos que esta métrica no será concluyente para la selección del mejor modelo.
+
+Por último, revisando las métricas del RMSE y MAE en la partición de test, observamos una variación de menos de 0.07 entre el RMSE del modelo propio con la variable alimentación que sería nuestro modelo con mejor performance el modelo y el modelo de variables categóricas que sería nuestro peor modelo analizando esta métrica. Lo mismo sucede con el MAE donde esta variación entre los dos modelos es de 0.01. 
+
+Con estos puntos mencionados, si bien en test el modelo que mejor performa es el modelo propio 1 con la variable alimentación, esta mejoría es tan leve con respecto al resto y no sumamos tampoco variabilidad explicada, no se puede concluir que este es el modelo superador ya que los cuatro performan de forma similar. 
+
+
+## 5) Diagnóstico del modelo
+
+Se revisa el cumplimiento de los supuestos del modelo lineal:
+
+-   Los errores tienen media cero.
+-   Los errores deben cumplir con la homocedasticidad.
+-   Los errores tienen distribución normal.
+-   Los errores son independientes entre si.
+
+Para esto utilizaremos la función plot que realiza ciertos gráficos que nos ayudaran a comprobarlos.
+
+```{r}
+# Se utiliza plot para Verificas los 4 gráficos interes de los supuesto para el modelo inicial
+plot(modelo_inicial)
+```
+
+En el primer gráfico se comparan los residuos y los valores resultantes de la predicción. La curva graficada denota que hay existencia de una estructura en los datos, viendo que la varianza pareciera aumentar en los valores predichos más cercanos al eje Y. También hay una curvatura en el centro de la nube de puntos. Esto nos permite afirmar que el supuesto de homocedasticidad no esta siendo cumplido.
+
+Ya revisando el Q-Q Plot, podemos ver que en los extremos sobre todo en el extremo superior las distribución de los errores se aleja bastante de una normal. Por lo que se define que no cumple con el supuesto de normalidad.
+
+Por último se verifica que hay por lo menos 5 puntos con alto leverage.
+
+En conclusión, podemos afirmar que el modelo inicial no cumple con los supuesto del modelos lineal.
+
+## 6) Modelo Robusto
+
+Se realiza un scatter plot para hacer la visualización de la relación peso y altura del dataset de train en comparación con este nuevo dataset que llamaremos modelo6.
+
+```{r}
+# Se una ggplot para graficar los puntos del dataset de train
+scatter_train <- ggplot(encuesta_train, aes(x=altura, y=peso)) + geom_point(colour = 4)
+
+# Se una ggplot para graficar los puntos del dataset de modelo6
+scatter_modelo6 <- ggplot(encuesta_modelo6, aes(x=altura, y=peso)) + geom_point(colour = 3)
+
+#Se usa ggarrange para concatenar los gráficos
+plot <- ggarrange(scatter_train, scatter_modelo6,
+                    ncol = 2, nrow = 1)
+
+# Utilizo annotate  para poner un título.
+annotate_figure(plot, top = text_grob("Comparación Train y Modelo6 de su relación Peso/altura", 
+               color = "black", face = "bold", size = 14))
+```
+
+Se observa con claridad que en el modelo6 que existen varios puntos en el dataset con pesos mucho mayores (más de 150kg) para alturas promedio de 1.6 a 1.7 m. Es de interés poder construir un modelo que pueda implementarse para estos datos ya que no sería correcto excluirlos del análisis por considerarse outliers ya que evidentemente son personas con alguna enfermedad relacionada con el sobrepeso lo cual puede ser objetivo de un análisis distinto.
+
+Con esta mención, se procede a utilizar la misma función para el modelo inicial pero entrenando con este nuevo dataset:
+
+```{r}
+
+# Se entrena el modelo inicial con los datos de modelo6
+modelo_modelo6 <- lm(peso ~ altura + edad + genero + dias_actividad_fisica_semanal + consumo_diario_alcohol, data = encuesta_modelo6)
+
+# Ejecuto glance de la Liberia broom para ver el R2 y R2 ajustado del modelo
+broom::glance(modelo_modelo6)
+
+# Utilizamos augment para predecir con nuestro modelo inicial 
+pred_modelo6<-  augment(modelo_modelo6, newdata = encuesta_modelo6)
+
+#Utilizamos la función rmse y mae para calcular los errores y add_row para que que salga en una sola salida
+rmse(data = pred_modelo6, truth = peso, estimate = .fitted)%>% 
+  add_row(mae(data = pred_modelo6, truth = peso, estimate = .fitted))
+
+#Usamos augment para generar el df con las predicciones de test
+pred_modelo6 <-  augment(modelo_modelo6, newdata = encuesta_test)
+
+#Utilizamos la función rmse y mae para calcular los errores y add_row para que que salga en una sola salida
+rmse(data = pred_modelo6, truth = peso, estimate = .fitted)%>% 
+  add_row(mae(data = pred_modelo6, truth = peso, estimate = .fitted))
+```
+
+En primer lugar se observa de la salida del glance es la caída en los coeficiente de determinación en comparación con el modelo de train. Esto se debe a que por la presencia de puntos alejados de la media se logra captar un menor cantidad de variabilidad explicada.
+
+Luego analizando los errores notamos un fuerte aumento en los errores de la predicción de los datos de entrenamiento.. De todas formas esta situación no se traslada completamente a la predicción con datos de test. Si bien hay un aumento de los errores, no es tan elevado.
+
+Para tratar de suplir esta caída en las métricas de entrenamiento debido a que estos valores hacen crecer el error, se propone utilizar un método robusto de lmrob de la librería Robustbase:
+
+
+```{r}
+# Corremos el modelo robsuto lmrob
+modelo_modelo6_robusto <- lmrob(peso ~ altura + edad + genero + dias_actividad_fisica_semanal + consumo_diario_alcohol, data = encuesta_modelo6)
+
+#Usamos augment para generar el df con las predicciones
+pred_modelo6_robusto <-  augment(modelo_modelo6_robusto, newdata = encuesta_modelo6)
+
+#Usamos summary para ver el R2 y R ajust de nuestro modelo robusto
+summary(modelo_modelo6_robusto)
+```
+
+Con la salida de la función summary lo primero que veremos es que la significatividad de las variables es prácticamente la misma que lo que nos daba en el modelo inicial para el dataset de train. 
+
+La segunda observación a realizar es que tanto el $R^2$ como el $R^2$ ajustado vuelven a crecer considerablemente con respecto al modelo lineal múltiple no robusto: 
+
+* El $R^2$ pasa de 0.2737 a 0.3869.
+* El $R^2$ ajustado pasa de 0.2732 a 0.3865.
+
+Incluso en términos de los coeficientes de determinación logro mejorar al modelo lineal múltiple inicial con el dataset de train que tenía un $R^2$ de 0.3543754 y un $R^2$ ajustado de 0.3539. Esto indica que el dataset de train ya contiene valores que perturban al modelo lineal múltiple. 
+
+Luego revisaremos los errores RMSE y MAE con las predicciones para train y también sumaremos la predicción sobre el data set de test para evaluar sobre datos nuevos:
+
+```{r}
+#Utilizamos la función rmse y mae para calcular los errores y add_row para que que salga en una sola salida
+rmse(data = pred_modelo6_robusto, truth = peso, estimate = .fitted)%>% 
+  add_row(mae(data = pred_modelo6_robusto, truth = peso, estimate = .fitted))
+
+#Usamos augment para generar el df con las predicciones de test
+pred_modelo6_robusto <-  augment(modelo_modelo6_robusto, newdata = encuesta_test)
+
+#Utilizamos la función rmse y mae para calcular los errores y add_row para que que salga en una sola salida
+rmse(data = pred_modelo6_robusto, truth = peso, estimate = .fitted)%>% 
+  add_row(mae(data = pred_modelo6_robusto, truth = peso, estimate = .fitted))
+```
+
+Comparando los valores de train notamos que hay una diferencia a favor del modelo lineal no robusto. Sin embargo, lo más relevante que veremos y como el objetivo final de estos modelos es predecir sobre nuevos datos, analizando la predicciones de test en ambos Errores se logran mejores resultado que con un modelo lineal no robusto. De hecho esta muy cerca en términos de errores al RMSE y MAE del modelo inicial entrenado anteriormente. 
+
+En conclusión, el modelo robusto cuando se cuenta con datos que podrían ser considerados outlier performa mejor sobre nuevos datos que el modelo lineal ya que aplica una optimización de los betas para que los errores demasiado grandes no tengan tanta influencia generando que se logre una mayor variabilidad explicada y además obtiene predicciones en nuevo datos con menor error.  
+
+```{r eval=FALSE, include=FALSE}
+library(MASS)
+
+modelo_modelo6_robusto <- rlm(peso ~ altura + edad + genero + dias_actividad_fisica_semanal + consumo_diario_alcohol, data = encuesta_modelo6)
+
+pred_modelo6_robusto <-  augment(modelo_modelo6_robusto, newdata = encuesta_modelo6)
+
+# 2. R2 Score components
+
+# 2.1. Average of actual data
+avr_y_actual <- mean(pred_modelo6_robusto$peso)
+
+# 2.2. Total sum of squares
+ss_total <- sum((pred_modelo6_robusto$peso - avr_y_actual)^2)
+
+# 2.3. Regression sum of squares
+ss_regression <- sum((pred_modelo6_robusto$.fitted - avr_y_actual)^2)
+
+# 2.4. Residual sum of squares
+ss_residuals <- sum((pred_modelo6_robusto$peso - pred_modelo6_robusto$.fitted)^2)
+
+# 3. R2 Score
+r2 <- 1 - ss_residuals / ss_total
+r2
+
+r2adj <-1-(1-r2)*((7060-1)/(7060-6))
+r2adj
+
+rmse(data = pred_modelo6_robusto, truth = peso, estimate = .fitted)%>% 
+  add_row(mae(data = pred_modelo6_robusto, truth = peso, estimate = .fitted))
+
+```
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```

@@ -1,0 +1,7 @@
+"0","scatter_train <- ggplot(encuesta_train, aes(x=altura, y=peso)) + geom_point(colour = 4)"
+"0","scatter_modelo6 <- ggplot(encuesta_modelo6, aes(x=altura, y=peso)) + geom_point(colour = 3)"
+"0","plot <- ggarrange(scatter_train, scatter_modelo6,"
+"0","                    ncol = 2, nrow = 1)"
+"0","# Utilizo esta función para poner un título."
+"0","annotate_figure(plot, top = text_grob(""Comparación Train y Modelo6 de su relación Peso/altura"", "
+"0","               color = ""black"", face = ""bold"", size = 14))"

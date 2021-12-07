@@ -1,0 +1,10 @@
+"0","```r
+# Creamos una función que recibe un vector con los parametros del modelo y el set de datos y devuelve el ECM
+measure_distance <- function(ordenada, pendiente, data) {
+ diff <- data$y - model1(ordenada, pendiente, data)
+ mean(diff ^ 2)
+   }
+measure_distance(7, 1.5, sim1)
+```"
+"1","[1] 7.103355
+"

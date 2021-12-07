@@ -1,0 +1,5 @@
+"0","```r
+modelo_exp_sex <- lm(salario_neto ~ anos_de_experiencia + me_identifico, data = df)
+tidy_mes <- tidy(modelo_exp_sex, conf.int = TRUE)
+tidy_mes
+```"

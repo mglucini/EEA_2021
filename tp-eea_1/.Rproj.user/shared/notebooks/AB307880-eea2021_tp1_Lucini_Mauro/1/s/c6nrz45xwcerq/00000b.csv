@@ -1,0 +1,8 @@
+"0",""
+"0","freq_hambre_comidagrasa<- encuesta_train %>%"
+"0","  group_by(frecuencia_hambre_mensual, consumo_semanal_comida_grasa) %>% #agrupamos por las variables"
+"0","  summarise(freq_absoluta = n()) %>% #hacemos un count"
+"0","  mutate(freq_relativa = freq_absoluta / sum(freq_absoluta)) #Sacamos la frencuencia absoluta con sum"
+"1","`summarise()` has grouped output by 'frecuencia_hambre_mensual'. You can override using the `.groups` argument.
+"
+"0","freq_hambre_comidagrasa"

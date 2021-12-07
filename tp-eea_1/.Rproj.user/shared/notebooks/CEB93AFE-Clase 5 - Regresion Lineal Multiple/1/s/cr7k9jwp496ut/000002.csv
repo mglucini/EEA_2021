@@ -1,0 +1,4 @@
+"0","```r
+modelo_3 <- lm(salario_neto ~ anos_de_experiencia + gente_a_cargo + me_identifico, data = df2)
+tidy(modelo_3)
+```"

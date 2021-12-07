@@ -1,0 +1,6 @@
+"0","modelo_categoricas <- lm(peso ~ altura + edad + genero +  consumo_semanal_snacksFactor + edad * genero, data = df_modelo_categoricas)"
+"0",""
+"0","tidy_meg <- tidy(modelo_categoricas, conf.int = TRUE)%>%"
+"0","  select(term, statistic, p.value, conf.low, conf.high)%>% "
+"0","  mutate(p.value = round(p.value, 4))"
+"0","tidy_meg"

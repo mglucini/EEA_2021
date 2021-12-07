@@ -1,0 +1,6 @@
+"0",""
+"0",""
+"0","pred_modelo_propio1_test <-  augment(modelo_propio_1, newdata = encuesta_test)"
+"0",""
+"0","rmse(data = pred_modelo_propio1_test, truth = peso, estimate = .fitted)%>%"
+"0","  add_row(mae(data = pred_modelo_propio1_test, truth = peso, estimate = .fitted))"

@@ -1,0 +1,2 @@
+"0","encuesta_train$alimentacion <- relevel(encuesta_train$alimentacion, ref = ""Equilibrada"")"
+"0","encuesta_train  %>%  count(alimentacion)"

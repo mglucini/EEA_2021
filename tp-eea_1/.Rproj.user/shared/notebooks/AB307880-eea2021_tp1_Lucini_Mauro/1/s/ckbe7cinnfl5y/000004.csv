@@ -1,0 +1,3 @@
+"0",""
+"0","tidy_meg <- tidy(modelo_inicial, conf.int = TRUE)"
+"0","tidy_meg"

@@ -1,0 +1,26 @@
+"0","```r
+# Accedemos a la información de los coeficientes estimados
+intercepto_1 = modelo_exp_edu$coefficients[1]
+pendiente_meed = modelo_exp_edu$coefficients[2]
+intercepto = c()
+for (i in 3:9) {
+  intercepto[i] = modelo_exp_edu$coefficients[1] + modelo_exp_edu$coefficients[i]
+ }
+
+# Graficamos el dataset y el modelo
+df %>% 
+  ggplot(., aes(x = anos_de_experiencia, y = salario_neto)) + 
+  geom_abline(intercept = intercepto_1, slope = pendiente_meed, color = \"forestgreen\", size=1) +
+  geom_abline(intercept = intercepto[3], slope = pendiente_meed, color = \"darkorange\", size=1) + 
+    geom_abline(intercept = intercepto[4], slope = pendiente_meed, color = \"red\", size=1) + 
+    geom_abline(intercept = intercepto[5], slope = pendiente_meed, color = \"violet\", size=1) +  
+    geom_abline(intercept = intercepto[6], slope = pendiente_meed, color = \"blue\", size=1) +  
+    geom_abline(intercept = intercepto[7], slope = pendiente_meed, color = \"black\", size=1) +  
+    geom_abline(intercept = intercepto[8], slope = pendiente_meed, color = \"brown\", size=1) + 
+    geom_abline(intercept = intercepto[9], slope = pendiente_meed, color = \"yellow\", size=1) + 
+  geom_point() +
+  theme_bw() +
+  scale_x_continuous(limits = c(0,40)) +
+  scale_y_continuous(limits = c(0,150000)) +
+  labs(title=\"Modelo Lineal Múltiple: Años en la empresa y Nivel Educativo\", x=\"Años de experiencia\", y=\"Salario Neto\") 
+```"

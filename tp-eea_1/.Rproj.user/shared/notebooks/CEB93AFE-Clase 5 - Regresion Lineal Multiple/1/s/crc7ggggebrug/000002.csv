@@ -1,0 +1,5 @@
+"0","```r
+encuesta <- read_csv(\"../Fuentes/encuesta_RLM_limpia.csv\")
+```"
+"1","Missing column names filled in: 'X1' [1]
+"

@@ -1,0 +1,22 @@
+.libPaths()
+myPaths <- .libPaths()
+
+myPaths <- c(myPaths, "/home/mauro/environments/R/x86_64-pc-linux-gnu-library/4.1")
+myPaths <- c(myPaths[5], myPaths[1])
+.libPaths(myPaths) 
+
+semilla <- "122323 192323 232303 222323 252323"
+
+#Variables data drifting
+c("clase_ternaria", "clase01", "ccajas_transacciones",  "Master_mpagominimo",  
+  #variables propias 
+  "internet",  "tpaquete1",  "mprestamos_prendarios")
+
+"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"
+
+
+bucket_name <- "bucket-dmeyf-mgl"
+user <- "mglucini"
+pass <- "mauro1407/"
+git remote add Origin git@github.com:mglucini/tpdmeyf.git
+git push https://github.com/mglucini/tpdmeyf

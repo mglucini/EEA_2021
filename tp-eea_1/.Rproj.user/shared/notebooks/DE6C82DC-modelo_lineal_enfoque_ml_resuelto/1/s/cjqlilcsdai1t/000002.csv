@@ -1,0 +1,6 @@
+"0","```r
+# Calculamos las distancias para los nuevos modelos
+models <- models %>% 
+  mutate(dist = purrr::map2_dbl(a1, a2, measure_distance, sim1))
+models
+```"

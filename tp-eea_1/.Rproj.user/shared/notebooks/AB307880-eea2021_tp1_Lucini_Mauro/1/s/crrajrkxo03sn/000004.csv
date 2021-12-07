@@ -1,0 +1,6 @@
+"0","# Importo el dataset de train"
+"0","encuesta_train <- read_csv(""/home/mauro/Escritorio/Facultad/Data Mining/Enfoque Estadístico del Aprendizaje/Trabajo Práctico/data/encuesta_salud_train.csv"",show_col_types = FALSE)"
+"0","# Importo el dataset de test"
+"0","encuesta_test <- read_csv(""/home/mauro/Escritorio/Facultad/Data Mining/Enfoque Estadístico del Aprendizaje/Trabajo Práctico/data/encuesta_salud_test.csv"",show_col_types = FALSE)"
+"0","# Importo el dataset del modelo 6"
+"0","encuesta_modelo6 <- read_csv(""/home/mauro/Escritorio/Facultad/Data Mining/Enfoque Estadístico del Aprendizaje/Trabajo Práctico/data/encuesta_salud_modelo6.csv"",show_col_types = FALSE)"

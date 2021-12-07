@@ -1,0 +1,7 @@
+"0","```r
+# armamos nueva variable de experiencia previa
+df3 <- df2 %>%
+  mutate(exp_previa = anos_de_experiencia - anos_en_la_empresa_actual)
+# modelo 2: separando experiencia previa y empresa actual  
+tidy(lm(salario_neto ~ exp_previa + anos_en_la_empresa_actual, data = df3))
+```"

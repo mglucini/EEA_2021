@@ -1,0 +1,6 @@
+"0","```r
+options(scipen=1)
+# Modelo Años de experiencia y gente a cargo
+tidy_meg %>%
+  select(term, statistic, p.value, conf.low, conf.high)
+```"

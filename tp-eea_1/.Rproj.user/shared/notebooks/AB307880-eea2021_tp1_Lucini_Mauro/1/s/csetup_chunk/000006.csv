@@ -1,0 +1,2 @@
+"0","# No mostrar warning en el html"
+"0","knitr::opts_chunk$set(warning = FALSE, message = FALSE) "

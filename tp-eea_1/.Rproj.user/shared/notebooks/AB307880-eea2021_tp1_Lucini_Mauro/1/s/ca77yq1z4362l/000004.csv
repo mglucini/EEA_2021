@@ -1,0 +1,3 @@
+"0","tidy_meg %>%"
+"0","  select(term, statistic, p.value, conf.low, conf.high)%>% "
+"0","  mutate(p.value = round(p.value, 4))"

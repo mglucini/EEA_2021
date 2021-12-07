@@ -1,0 +1,7 @@
+"0","```r
+ggplot(sim1, aes(x, y)) + 
+  geom_point(size = 2, colour = \"grey30\") + 
+  geom_abline(data = filter(models, rank(dist) <= 10),
+              aes(intercept = a1, slope = a2, colour = -dist)) +
+  theme_bw()
+```"
